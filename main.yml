@@ -1,0 +1,44 @@
+- name: Instalación rtpengine
+  hosts: all
+  become: 'true'
+  tasks:
+    - name: Instalar dependecias
+      apt: name={{ item }} state=present update_cache=yes
+      with_items:
+         - git   
+         - make
+         - curl
+    - name: Instalar más dependecias
+      shell: |
+          sudo mkdir /opt/rtpengine
+          cd /opt/rtpengine
+          apt-get install libmosquitto-dev libwebsockets-dev python3-websockets apt-utils dpkg-dev debhelper iptables libxtables-dev libip6tc-dev libip4tc-dev libcurl4-openssl-dev libglib2.0-dev libavcodec-extra libhiredis-dev libpcre3-dev libssl-dev libxmlrpc-core-c3-dev markdown zlib1g-dev module-assistant dkms gettext default-libmysqlclient-dev gperf libavcodec-dev libavfilter-dev libavformat-dev libavutil-dev libbencode-perl libcrypt-openssl-rsa-perl libcrypt-rijndael-perl libdigest-crc-perl libdigest-hmac-perl libevent-dev libio-multiplex-perl libio-socket-inet6-perl libjson-glib-dev libnet-interface-perl libpcap0.8-dev libsocket6-perl libswresample-dev libsystemd-dev nfs-common netcat-openbsd netcat unzip libconfig-tiny-perl libspandsp-dev -y
+          apt install libxtables-dev libip6tc-dev libip4tc-dev libiptc-dev -y
+          apt install -y linux-headers-$(uname -r) linux-image-$(uname -r)          
+    - name: Instalar rtpengine
+      shell: |
+         cd /opt/rtpengine 
+         git clone https://github.com/sipwise/rtpengine.git .
+         VER=1.0.4
+         curl https://codeload.github.com/BelledonneCommunications/bcg729/tar.gz/$VER >bcg729_$VER.orig.tar.gz
+         tar zxf bcg729_$VER.orig.tar.gz
+         cd bcg729-$VER
+         git clone https://github.com/ossobv/bcg729-deb.git debian
+         dpkg-buildpackage -us -uc -sa
+         cd ../
+         dpkg -i libbcg729-*.deb
+         export DEBIAN_FRONTEND=noninteractive
+         apt-get update -qqy
+         mkdir -p ./debian/flavors
+         touch ./debian/flavors/no_ngcp
+         dpkg-checkbuilddeps
+         sudo apt-get install --yes $(dpkg-checkbuilddeps 2>&1 | sed -e 's/dpkg-checkbuilddeps:\serror:\sUnmet build dependencies: //g' -e  's/[\(][^)]*[\)] //g')
+         dpkg-checkbuilddeps
+         dpkg-buildpackage -b -us -uc
+         dpkg -i ../*.deb       
+    - name: Config
+      shell: |
+        sed -i 's/# interface = 12.23.34.45!23.34.45.56/interface = {{ ip }} /g' /etc/rtpengine/rtpengine.conf
+        sed -i 's/interface = any/interface = {{ ip2 }} /g' /etc/rtpengine/rtpengine.conf
+        systemctl restart rtpengine  
+  
